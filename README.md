@@ -131,9 +131,6 @@ cd NeuralPocket
 # or build from the command line:
 ./gradlew assembleRelease
 ```
-
-The release build has minification and resource shrinking enabled. If you add new libraries that use reflection, add the appropriate `-keep` rules to `app/proguard-rules.pro`.
-
 ---
 
 ## Dependencies
