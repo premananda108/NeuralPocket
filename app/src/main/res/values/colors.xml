@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand -->
+    <color name="telegram_blue">#2AABEE</color>
+    <color name="telegram_blue_dark">#1A8CC8</color>
+
+    <!-- Dark theme surfaces -->
+    <color name="dark_bg">#17212B</color>
+    <color name="dark_surface">#232E3C</color>
+    <color name="dark_drawer">#1C2733</color>
+    <color name="dark_input">#1C2733</color>
+    <color name="dark_user_bubble">#2B5278</color>
+    <color name="dark_ai_bubble">#182533</color>
+    <color name="dark_text_primary">#FFFFFF</color>
+    <color name="dark_text_secondary">#8A9BAE</color>
+    <color name="dark_divider">#2B3D4F</color>
+
+    <!-- Light theme surfaces -->
+    <color name="light_bg">#F0F2F5</color>
+    <color name="light_surface">#FFFFFF</color>
+    <color name="light_drawer">#FFFFFF</color>
+    <color name="light_input">#FFFFFF</color>
+    <color name="light_user_bubble">#EFFDDE</color>
+    <color name="light_user_bubble_text">#000000</color>
+    <color name="light_ai_bubble">#FFFFFF</color>
+    <color name="light_text_primary">#000000</color>
+    <color name="light_text_secondary">#707579</color>
+    <color name="light_divider">#E0E0E0</color>
+
+    <!-- Shared -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="transparent">#00000000</color>
+    <color name="error_red">#FF5252</color>
+    <color name="success_green">#4CAF50</color>
+    <color name="chat_avatar_1">#E67E22</color>
+    <color name="chat_avatar_2">#9B59B6</color>
+    <color name="chat_avatar_3">#27AE60</color>
+    <color name="record_red">#FF3B30</color>
+</resources>

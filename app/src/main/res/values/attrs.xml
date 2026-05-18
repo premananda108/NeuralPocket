@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom theme attributes -->
+    <attr name="colorChatBackground" format="color"/>
+    <attr name="colorUserBubble" format="color"/>
+    <attr name="colorUserBubbleText" format="color"/>
+    <attr name="colorAiBubble" format="color"/>
+    <attr name="colorAiBubbleText" format="color"/>
+    <attr name="colorInputBackground" format="color"/>
+    <attr name="colorDrawerBackground" format="color"/>
+    <attr name="colorTimeText" format="color"/>
+    <attr name="colorDivider" format="color"/>
+    <attr name="colorSecondaryText" format="color"/>
+</resources>

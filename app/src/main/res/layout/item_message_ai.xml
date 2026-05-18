@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AI message bubble — aligned to the LEFT with avatar -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="2dp"
+    android:gravity="bottom">
+
+    <!-- AI Avatar circle -->
+    <TextView
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@drawable/bg_avatar"
+        android:gravity="center"
+        android:text="AI"
+        android:textColor="@color/white"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:layout_marginEnd="6dp"/>
+
+    <!-- Bubble -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:orientation="vertical"
+        android:background="@drawable/bg_ai_bubble"
+        android:paddingHorizontal="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="8dp">
+
+        <!-- Message text -->
+        <TextView
+            android:id="@+id/messageText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="?attr/colorAiBubbleText"
+            android:textSize="16sp"
+            android:lineSpacingExtra="4dp"
+            android:textIsSelectable="true"/>
+
+        <!-- Typing dots indicator -->
+        <TextView
+            android:id="@+id/typingDots"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="●  ●  ●"
+            android:textColor="?attr/colorTimeText"
+            android:textSize="10sp"
+            android:visibility="gone"/>
+
+        <!-- Time -->
+        <TextView
+            android:id="@+id/timeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginTop="2dp"
+            android:textColor="?attr/colorTimeText"
+            android:textSize="11sp"/>
+    </LinearLayout>
+</LinearLayout>

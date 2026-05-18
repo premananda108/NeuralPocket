@@ -1,0 +1,7 @@
+.idea
+.gradle
+.kotlin
+app/build
+build
+local.properties
+.vscode/settings.json

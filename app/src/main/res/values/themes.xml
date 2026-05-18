@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ── Light Theme ──────────────────────────────────────────────────── -->
+    <style name="Theme.NeuralPocket" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/telegram_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/telegram_blue</item>
+        <item name="colorSurface">@color/light_surface</item>
+        <item name="colorOnSurface">@color/light_text_primary</item>
+        <item name="android:windowBackground">@color/light_bg</item>
+        <item name="android:statusBarColor">@color/telegram_blue</item>
+        <item name="android:navigationBarColor">@color/light_input</item>
+
+        <!-- Custom attrs -->
+        <item name="colorChatBackground">@color/light_bg</item>
+        <item name="colorUserBubble">@color/light_user_bubble</item>
+        <item name="colorUserBubbleText">@color/light_user_bubble_text</item>
+        <item name="colorAiBubble">@color/light_ai_bubble</item>
+        <item name="colorAiBubbleText">@color/light_text_primary</item>
+        <item name="colorInputBackground">@color/light_input</item>
+        <item name="colorDrawerBackground">@color/light_drawer</item>
+        <item name="colorTimeText">@color/light_text_secondary</item>
+        <item name="colorDivider">@color/light_divider</item>
+        <item name="colorSecondaryText">@color/light_text_secondary</item>
+    </style>
+
+    <!-- ── Dark Theme ───────────────────────────────────────────────────── -->
+    <style name="Theme.NeuralPocket.Dark" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/telegram_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/telegram_blue_dark</item>
+        <item name="colorSurface">@color/dark_surface</item>
+        <item name="colorOnSurface">@color/dark_text_primary</item>
+        <item name="android:windowBackground">@color/dark_bg</item>
+        <item name="android:statusBarColor">@color/dark_surface</item>
+        <item name="android:navigationBarColor">@color/dark_input</item>
+
+        <!-- Custom attrs -->
+        <item name="colorChatBackground">@color/dark_bg</item>
+        <item name="colorUserBubble">@color/dark_user_bubble</item>
+        <item name="colorUserBubbleText">@color/white</item>
+        <item name="colorAiBubble">@color/dark_ai_bubble</item>
+        <item name="colorAiBubbleText">@color/white</item>
+        <item name="colorInputBackground">@color/dark_input</item>
+        <item name="colorDrawerBackground">@color/dark_drawer</item>
+        <item name="colorTimeText">@color/dark_text_secondary</item>
+        <item name="colorDivider">@color/dark_divider</item>
+        <item name="colorSecondaryText">@color/dark_text_secondary</item>
+    </style>
+
+</resources>
