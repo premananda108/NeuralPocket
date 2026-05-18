@@ -182,10 +182,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.newChatDrawerButton).setOnClickListener {
             viewModel.createNewChat(); drawerLayout.closeDrawers()
         }
-        findViewById<MaterialButton>(R.id.selectModelDrawerButton).setOnClickListener {
-            showModelSelectionDialog(); drawerLayout.closeDrawers()
-        }
-
         selectModelDrawerButton.setOnClickListener {
             showModelSelectionDialog()
             drawerLayout.closeDrawers()
@@ -577,14 +573,6 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(mode)
         val isDark = mode == AppCompatDelegate.MODE_NIGHT_YES
         setTheme(if (isDark) R.style.Theme_NeuralPocket_Dark else R.style.Theme_NeuralPocket)
-    }
-
-    private fun toggleTheme() {
-        val current = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_YES)
-        val newMode = if (current == AppCompatDelegate.MODE_NIGHT_YES) AppCompatDelegate.MODE_NIGHT_NO else AppCompatDelegate.MODE_NIGHT_YES
-        prefs.edit().putInt("theme_mode", newMode).apply()
-        applyTheme(newMode)
-        recreate()
     }
 
     override fun onDestroy() {

@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.DiffUtil
 import ua.pp.prema.NeuralPocket.R
 import ua.pp.prema.NeuralPocket.data.Chat
 
@@ -24,9 +25,21 @@ class ChatListAdapter(
     }
 
     fun updateChats(newChats: List<Chat>) {
+        val old = chats.toList()
+        val diffCallback = object : DiffUtil.Callback() {
+            override fun getOldListSize() = old.size
+            override fun getNewListSize() = newChats.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int) =
+                old[oldPos].id == newChats[newPos].id
+            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean {
+                val o = old[oldPos]; val n = newChats[newPos]
+                return o.title == n.title && o.messages.lastOrNull()?.text == n.messages.lastOrNull()?.text
+            }
+        }
+        val diffResult = DiffUtil.calculateDiff(diffCallback)
         chats.clear()
         chats.addAll(newChats)
-        notifyDataSetChanged()
+        diffResult.dispatchUpdatesTo(this)
     }
 
     inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {

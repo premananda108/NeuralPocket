@@ -89,12 +89,16 @@ class MessageAdapter(
                     }
                 }
             } else {
-                typingDots.visibility = View.GONE
-                pulseAnimator?.cancel()
-                pulseAnimator = null
-                typingDots.alpha = 1.0f
+                cancelAnimator()
             }
             timeText.text = if (msg.isStreaming) "" else formatTime(msg.timestamp)
+        }
+
+        fun cancelAnimator() {
+            pulseAnimator?.cancel()
+            pulseAnimator = null
+            typingDots.visibility = View.GONE
+            typingDots.alpha = 1.0f
         }
     }
 
@@ -113,6 +117,11 @@ class MessageAdapter(
         } else {
             AiViewHolder(inflater.inflate(R.layout.item_message_ai, parent, false))
         }
+    }
+
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        if (holder is AiViewHolder) holder.cancelAnimator()
+        super.onViewRecycled(holder)
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
@@ -140,16 +149,14 @@ class MessageAdapter(
     }
 
     fun replaceAll(newMessages: List<ChatMessage>) {
+        val old = messages.toList()
         val diffCallback = object : DiffUtil.Callback() {
-            override fun getOldListSize() = messages.size
+            override fun getOldListSize() = old.size
             override fun getNewListSize() = newMessages.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                // В нашем случае сообщения добавляются только в конец
-                return oldItemPosition == newItemPosition
-            }
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                return messages[oldItemPosition] == newMessages[newItemPosition]
-            }
+            override fun areItemsTheSame(oldPos: Int, newPos: Int) =
+                old[oldPos].id == newMessages[newPos].id
+            override fun areContentsTheSame(oldPos: Int, newPos: Int) =
+                old[oldPos] == newMessages[newPos]
         }
         val diffResult = DiffUtil.calculateDiff(diffCallback)
         messages.clear()

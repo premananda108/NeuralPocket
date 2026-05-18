@@ -274,6 +274,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (fullResponse.isEmpty()) fullResponse = "— Stopped —"
                 finaliseAiMessage(chatId, fullResponse)
             } finally {
+                withContext(Dispatchers.IO) { imageFile?.delete() }
                 inferenceJob = null
             }
         }
