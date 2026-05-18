@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LiteRTCpuDemo"
+rootProject.name = "NeuralPocket"
 include(":app")

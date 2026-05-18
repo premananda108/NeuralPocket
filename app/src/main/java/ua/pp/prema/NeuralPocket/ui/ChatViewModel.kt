@@ -368,7 +368,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveChats()
     }
 
-    private fun saveChats() = chatRepository.save(_uiState.value.chats)
+    private fun saveChats() {
+        val snapshot = _uiState.value.chats
+        viewModelScope.launch(Dispatchers.IO) {
+            chatRepository.save(snapshot)
+        }
+    }
 
     // ── Utility ───────────────────────────────────────────────────────────────
 
