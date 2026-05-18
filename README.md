@@ -197,4 +197,8 @@ Tests use **MockK** for Android framework mocking and `TemporaryFolder` for file
 
 ## License
 
-This project is provided as-is for personal and educational use. The bundled Gemma models are subject to Google's [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+Copyright (c) 2025 Premananda
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+> Note: The Gemma model files downloaded by this app are subject to Google's [Gemma Terms of Use](https://ai.google.dev/gemma/terms) and are not covered by the MIT License.
