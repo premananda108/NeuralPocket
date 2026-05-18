@@ -39,18 +39,21 @@ class PreflightChecker(private val context: Context) {
         val memInfo = ActivityManager.MemoryInfo().also { actMgr.getMemoryInfo(it) }
         val ramGb   = memInfo.totalMem.toDouble() / GiB
         val ramStr  = "%.1f GB".format(ramGb)
+        val minRamStr = "%.1f GB".format(PreflightLimits.MIN_RAM_GB)
+        val recRamStr = "%.1f GB".format(PreflightLimits.RECOMMENDED_RAM_GB)
         when {
-            ramGb < 3.0 -> errors.add(context.getString(R.string.preflight_error_ram, ramStr))
-            ramGb < 6.0 -> warnings.add(context.getString(R.string.preflight_warn_ram, ramStr))
+            ramGb < PreflightLimits.MIN_RAM_GB -> errors.add(context.getString(R.string.preflight_error_ram, ramStr, minRamStr))
+            ramGb < PreflightLimits.RECOMMENDED_RAM_GB -> warnings.add(context.getString(R.string.preflight_warn_ram, ramStr, recRamStr))
         }
 
-        // 4. Free storage
         val stat    = StatFs(context.filesDir.absolutePath)
         val freeGb  = (stat.availableBlocksLong * stat.blockSizeLong).toDouble() / GiB
         val freeStr = "%.1f GB".format(freeGb)
+        val minStorageStr = "%.1f GB".format(PreflightLimits.MIN_STORAGE_GB)
+        val recStorageStr = "%.1f GB".format(PreflightLimits.RECOMMENDED_STORAGE_GB)
         when {
-            freeGb < 1.5 -> errors.add(context.getString(R.string.preflight_error_storage, freeStr))
-            freeGb < 3.0 -> warnings.add(context.getString(R.string.preflight_warn_storage, freeStr))
+            freeGb < PreflightLimits.MIN_STORAGE_GB -> errors.add(context.getString(R.string.preflight_error_storage, freeStr, minStorageStr))
+            freeGb < PreflightLimits.RECOMMENDED_STORAGE_GB -> warnings.add(context.getString(R.string.preflight_warn_storage, freeStr, recStorageStr))
         }
 
         Log.d(TAG, "ABIs=$abis  RAM=$ramStr  Free=$freeStr  SDK=${Build.VERSION.SDK_INT}")

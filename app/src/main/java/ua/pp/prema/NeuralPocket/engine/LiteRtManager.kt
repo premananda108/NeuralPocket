@@ -33,12 +33,19 @@ import java.net.URL
 
 // ── Model catalog ─────────────────────────────────────────────────────────────
 
-data class ModelInfo(val name: String, val url: String)
+data class ModelInfo(val name: String, val url: String, val sizeGb: Double = 0.0, val minRamGb: Double = 0.0)
 
 val AVAILABLE_MODELS = listOf(
-    ModelInfo("gemma-4-E2B(2.6GB)", "https://pub-b07512464f924792a1bb4c7b3571db1e.r2.dev/gemma-4-E2B-it.litertlm"),
-    ModelInfo("gemma-4-E4B(3.7GB)", "https://pub-b07512464f924792a1bb4c7b3571db1e.r2.dev/gemma-4-E4B-it.litertlm")
+    ModelInfo("gemma-4-E2B(2.6GB)", "https://pub-b07512464f924792a1bb4c7b3571db1e.r2.dev/gemma-4-E2B-it.litertlm", 2.6, 3.6),
+    ModelInfo("gemma-4-E4B(3.7GB)", "https://pub-b07512464f924792a1bb4c7b3571db1e.r2.dev/gemma-4-E4B-it.litertlm", 3.7, 4.5)
 )
+
+object PreflightLimits {
+    const val MIN_RAM_GB = 3.6
+    const val RECOMMENDED_RAM_GB = 5.2
+    const val MIN_STORAGE_GB = 3.0
+    const val RECOMMENDED_STORAGE_GB = 4.5
+}
 
 // ── Download progress ─────────────────────────────────────────────────────────
 
@@ -55,6 +62,7 @@ sealed class DownloadException(msg: String) : Exception(msg) {
     class HttpError(val code: Int) : DownloadException("HTTP $code")
     class Timeout : DownloadException("timeout")
     class IoError(val detail: String) : DownloadException(detail)
+    class LowRam(val deviceRam: Double, val requiredRam: Double) : DownloadException("low ram")
 }
 
 // ── Engine result ─────────────────────────────────────────────────────────────
@@ -107,9 +115,20 @@ class LiteRtManager(private val context: Context) {
         val actMgr  = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val memInfo = ActivityManager.MemoryInfo().also { actMgr.getMemoryInfo(it) }
         val ramGb   = memInfo.totalMem.toDouble() / GiB
-        Log.d(TAG, "RAM: %.1f GB".format(ramGb))
+        val availGb = memInfo.availMem.toDouble() / GiB
+        Log.d(TAG, "RAM Total: %.1f GB, Avail: %.1f GB, LowMemory: ${memInfo.lowMemory}")
+        
         if (ramGb < 2.5) {
             throw Exception("out of memory: device has only %.1f GB RAM".format(ramGb))
+        }
+        
+        if (memInfo.lowMemory) {
+            throw Exception("out of memory: device is currently in a low memory state (avail: %.1f GB)".format(availGb))
+        }
+
+        val modelSizeGb = modelFile.length().toDouble() / GiB
+        if (ramGb < modelSizeGb + 0.5) {
+            throw Exception("out of memory: total RAM (%.1f GB) is too low for model size (%.1f GB)".format(ramGb, modelSizeGb))
         }
     }
 
@@ -203,6 +222,23 @@ class LiteRtManager(private val context: Context) {
      */
     fun downloadModel(model: ModelInfo, targetFile: File): Flow<DownloadState> = flow {
         val partFile = File(targetFile.parentFile, "${targetFile.name}.part")
+        
+        val actMgr  = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memInfo = ActivityManager.MemoryInfo().also { actMgr.getMemoryInfo(it) }
+        val ramGb   = memInfo.totalMem.toDouble() / GiB
+        if (model.minRamGb > 0 && ramGb < model.minRamGb) {
+            throw DownloadException.LowRam(ramGb, model.minRamGb)
+        }
+
+        if (model.sizeGb > 0) {
+            val stat = StatFs(targetFile.parentFile!!.absolutePath)
+            val free = stat.availableBlocksLong * stat.blockSizeLong
+            val requiredBytes = (model.sizeGb * 1024 * 1024 * 1024).toLong() + (100 * 1024 * 1024L)
+            if (free < requiredBytes) {
+                throw DownloadException.NoSpace()
+            }
+        }
+
         try {
             val url        = URL(model.url)
             val connection = (url.openConnection() as HttpURLConnection).apply {

@@ -421,6 +421,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         is DownloadException.HttpError  -> str(R.string.error_download_http, e.code)
         is DownloadException.Timeout    -> str(R.string.error_download_timeout)
         is DownloadException.IoError    -> str(R.string.error_download_io, e.detail)
+        is DownloadException.LowRam     -> str(R.string.error_download_low_ram, e.deviceRam, e.requiredRam)
     }
 
     private fun inferenceErrorMessage(kind: InferenceErrorKind) = when (kind) {
