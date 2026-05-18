@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "ua.pp.prema.NeuralPocket"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "ua.pp.prema.NeuralPocket"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 2
         versionName = "2.0"
 
