@@ -118,7 +118,7 @@ app/src/main/java/ua/pp/prema/NeuralPocket/
 **Prerequisites:**
 - Android Studio Hedgehog (2023.1.1) or newer
 - JDK 17
-- Android SDK with API 35
+- Android SDK with API 37
 
 **Steps:**
 
