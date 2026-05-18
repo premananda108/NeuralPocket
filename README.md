@@ -124,7 +124,7 @@ app/src/main/java/ua/pp/prema/NeuralPocket/
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/NeuralPocket.git
+git clone https://github.com/premananda108/NeuralPocket.git
 cd NeuralPocket
 
 # Open in Android Studio and let Gradle sync,
