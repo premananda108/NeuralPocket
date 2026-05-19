@@ -18,10 +18,11 @@ class ChatListAdapter(
     private var activeChatIndex: Int = 0
 
     fun setActiveIndex(index: Int) {
+        if (activeChatIndex == index) return
         val old = activeChatIndex
         activeChatIndex = index
-        notifyItemChanged(old)
-        notifyItemChanged(index)
+        if (old in 0 until chats.size) notifyItemChanged(old)
+        if (index in 0 until chats.size) notifyItemChanged(index)
     }
 
     fun updateChats(newChats: List<Chat>) {
@@ -59,8 +60,15 @@ class ChatListAdapter(
                 if (isActive) R.drawable.bg_chat_item_active else R.drawable.bg_chat_item
             )
 
-            root.setOnClickListener { onChatClick(index) }
-            root.setOnLongClickListener { onChatLongClick(index); true }
+            root.setOnClickListener { 
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) onChatClick(pos) 
+            }
+            root.setOnLongClickListener { 
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) onChatLongClick(pos)
+                true 
+            }
         }
     }
 

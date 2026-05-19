@@ -178,6 +178,7 @@ class MainActivity : AppCompatActivity() {
         )
         chatListRecyclerView.layoutManager = LinearLayoutManager(this)
         chatListRecyclerView.adapter = chatListAdapter
+        (chatListRecyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
 
         findViewById<MaterialButton>(R.id.newChatDrawerButton).setOnClickListener {
             viewModel.createNewChat(); drawerLayout.closeDrawers()
