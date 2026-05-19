@@ -41,7 +41,13 @@ AI responses are rendered with full Markdown support (bold, italic, code blocks,
 
 ## Screenshots
 
-> _Add screenshots here once the app is running on a device._
+<p align="center">
+  <img src="screenshots/screenshot_1.jpg" width="19%" alt="Screenshot 1" />
+  <img src="screenshots/screenshot_2.jpg" width="19%" alt="Screenshot 2" />
+  <img src="screenshots/screenshot_3.jpg" width="19%" alt="Screenshot 3" />
+  <img src="screenshots/screenshot_4.jpg" width="19%" alt="Screenshot 4" />
+  <img src="screenshots/screenshot_5.jpg" width="19%" alt="Screenshot 5" />
+</p>
 
 ---
 
