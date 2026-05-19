@@ -233,7 +233,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (prompt.isEmpty() && imageUri != null) {
                 append("Please describe and analyze what you see in this image in detail.")
             } else if (prompt.isEmpty() && audioBytes != null) {
-                append("Transcribe or describe this audio.")
+                val audioPrompt = "Listen to the audio. First, write down the exact transcription of what is said. Then, analyze whether the speaker is addressing you (the AI assistant). If they are addressing you, respond to their query."
+                append(audioPrompt)
             } else {
                 append(prompt)
             }
