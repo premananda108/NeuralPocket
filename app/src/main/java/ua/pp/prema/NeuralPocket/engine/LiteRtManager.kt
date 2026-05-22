@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -93,17 +94,20 @@ class LiteRtManager(private val context: Context) {
     suspend fun initEngine(modelFile: File, preferGpu: Boolean, skipMemoryCheck: Boolean = false): EngineHandle =
         withContext(Dispatchers.IO) {
             // Close old engine FIRST — only then check available memory.
-            // Previously, preflight ran before close(), so the lowMemory check
-            // would see the old engine's footprint and throw a false OOM error.
-            try {
-                engineHandle?.engine?.close()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error closing previous engine (ignoring): ${e.message}")
+            // engine.close() can block if the C++ inference thread is still running.
+            // withTimeoutOrNull(3000) ensures we never hang for more than 3 seconds.
+            // If it times out we abandon the old engine (it will be GC-finalized later).
+            val closed = withTimeoutOrNull(3_000L) {
+                try {
+                    engineHandle?.engine?.close()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error closing previous engine (ignoring): ${e.message}")
+                }
+            }
+            if (closed == null) {
+                Log.w(TAG, "engine.close() timed out after 3s — abandoning old engine")
             }
             engineHandle = null
-
-            // Give the OS a moment to reclaim native memory before we check it.
-            if (skipMemoryCheck) delay(800)
 
             runPreflight(modelFile, skipMemoryCheck)
 
