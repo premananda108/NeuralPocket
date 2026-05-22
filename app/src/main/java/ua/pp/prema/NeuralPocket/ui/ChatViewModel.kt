@@ -448,28 +448,41 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // ── Utility ───────────────────────────────────────────────────────────────
 
     /**
-     * Copies [uri] to [destFile], scaling down to [maxSide]px if the image is larger.
-     * Returns [destFile] regardless of whether the bitmap could be decoded
-     * (callers should check file.length() > 0 if needed).
+     * Copies [uri] to [destFile] with the decoded image fitting within [maxSide]×[maxSide].
+     *
+     * Uses the two-pass Android approach to avoid OOM on large camera photos:
+     * - Pass 1: inJustDecodeBounds — reads only the image header, zero pixel memory allocated.
+     * - Compute inSampleSize — largest power-of-2 that keeps both dimensions ≤ maxSide.
+     * - Pass 2: decodeStream with inSampleSize — allocates only (W/s × H/s × 4) bytes.
+     *
+     * Example: 12 MP photo (4000×3000), maxSide=512 → inSampleSize=8 → ~0.7 MB instead of ~45 MB.
      */
     private fun copyUriToFile(uri: Uri, destFile: File, maxSide: Int = 512): File {
-        val app = getApplication<Application>()
-        app.contentResolver.openInputStream(uri)?.use { inp ->
-            val original = BitmapFactory.decodeStream(inp)
-            if (original != null) {
-                val scale = minOf(maxSide.toFloat() / original.width, maxSide.toFloat() / original.height, 1f)
-                val scaled = if (scale < 1f) {
-                    Bitmap.createScaledBitmap(
-                        original,
-                        (original.width * scale).toInt(),
-                        (original.height * scale).toInt(),
-                        true
-                    ).also { if (it !== original) original.recycle() }
-                } else original
-                FileOutputStream(destFile).use { out ->
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        val resolver = getApplication<Application>().contentResolver
+
+        // Pass 1: decode bounds only — no pixels allocated.
+        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+
+        // Compute power-of-2 subsampling so the decoded image fits within maxSide×maxSide.
+        opts.inSampleSize = run {
+            var s = 1
+            while ((opts.outWidth / s) > maxSide || (opts.outHeight / s) > maxSide) s *= 2
+            s
+        }
+        opts.inJustDecodeBounds = false
+
+        // Pass 2: decode subsampled bitmap and compress to file.
+        resolver.openInputStream(uri)?.use { inp ->
+            val bitmap = BitmapFactory.decodeStream(inp, null, opts)
+            if (bitmap != null) {
+                try {
+                    FileOutputStream(destFile).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                    }
+                } finally {
+                    bitmap.recycle()
                 }
-                scaled.recycle()
             }
         }
         return destFile
