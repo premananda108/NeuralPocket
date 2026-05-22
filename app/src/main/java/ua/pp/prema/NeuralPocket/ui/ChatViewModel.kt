@@ -259,7 +259,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         inferenceJob = viewModelScope.launch {
-            val imageFile: File? = imageUri?.let { uri ->
+            // Copy image to internal storage so it survives app restart.
+            // External provider URIs (gallery / downloads) lose their permission
+            // grant after the process is killed, causing a SecurityException on reload.
+            val persistedUri: Uri? = imageUri?.let { uri ->
+                withContext(Dispatchers.IO) { persistImageToStorage(uri) }
+            }
+
+            // Update the user message with the persistent file URI.
+            if (persistedUri != null) {
+                _uiState.update { state ->
+                    val chats = state.chats.map { c ->
+                        if (c.id == chatId && c.messages.size >= 2) {
+                            val msgs = c.messages.toMutableList()
+                            msgs[msgs.size - 2] = msgs[msgs.size - 2].copy(imageUriString = persistedUri.toString())
+                            c.copy(messages = msgs)
+                        } else c
+                    }
+                    state.copy(chats = chats)
+                }
+            }
+
+            // For inference, create a 512px cache copy (deleted after use).
+            // If persistence failed fall back to copying from the original URI.
+            val inferUri = persistedUri ?: imageUri
+            val imageFile: File? = inferUri?.let { uri ->
                 withContext(Dispatchers.IO) { copyUriToCache(uri) }
             }
 
@@ -423,13 +447,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── Utility ───────────────────────────────────────────────────────────────
 
-    private fun copyUriToCache(uri: Uri): File {
-        val app  = getApplication<Application>()
-        val file = File(app.cacheDir, "input_image_${System.currentTimeMillis()}.jpg")
+    /**
+     * Copies [uri] to [destFile], scaling down to [maxSide]px if the image is larger.
+     * Returns [destFile] regardless of whether the bitmap could be decoded
+     * (callers should check file.length() > 0 if needed).
+     */
+    private fun copyUriToFile(uri: Uri, destFile: File, maxSide: Int = 512): File {
+        val app = getApplication<Application>()
         app.contentResolver.openInputStream(uri)?.use { inp ->
             val original = BitmapFactory.decodeStream(inp)
             if (original != null) {
-                val maxSide = 512
                 val scale = minOf(maxSide.toFloat() / original.width, maxSide.toFloat() / original.height, 1f)
                 val scaled = if (scale < 1f) {
                     Bitmap.createScaledBitmap(
@@ -439,13 +466,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         true
                     ).also { if (it !== original) original.recycle() }
                 } else original
-                FileOutputStream(file).use { out ->
+                FileOutputStream(destFile).use { out ->
                     scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
                 }
                 scaled.recycle()
             }
         }
-        return file
+        return destFile
+    }
+
+    /** Temporary 512px copy in cacheDir — deleted after inference. */
+    private fun copyUriToCache(uri: Uri): File =
+        copyUriToFile(uri, File(getApplication<Application>().cacheDir, "input_image_${System.currentTimeMillis()}.jpg"))
+
+    /**
+     * Persists image to [filesDir]/chat_images/ so it remains accessible after app restart.
+     * Returns a file:// [Uri] on success, or null on failure (caller keeps original URI).
+     */
+    private fun persistImageToStorage(uri: Uri): Uri? {
+        return try {
+            val app = getApplication<Application>()
+            val imagesDir = File(app.filesDir, "chat_images").apply { mkdirs() }
+            val dest = File(imagesDir, "img_${System.currentTimeMillis()}.jpg")
+            copyUriToFile(uri, dest, maxSide = 768)
+            if (dest.length() > 0) Uri.fromFile(dest) else null
+        } catch (e: Exception) {
+            Log.w(TAG, "persistImageToStorage failed: ${e.message}")
+            null
+        }
     }
 
     // ── Error messages ────────────────────────────────────────────────────────

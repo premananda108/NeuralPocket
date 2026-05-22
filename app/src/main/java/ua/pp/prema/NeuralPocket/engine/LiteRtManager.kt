@@ -25,6 +25,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -78,6 +81,8 @@ data class EngineHandle(val engine: Engine, val backend: String, val modelName: 
  */
 class LiteRtManager(private val context: Context) {
 
+    private val managerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     private var engineHandle: EngineHandle? = null
 
     val activeHandle: EngineHandle? get() = engineHandle
@@ -109,11 +114,37 @@ class LiteRtManager(private val context: Context) {
             }
             engineHandle = null
 
+            // Check the clean shutdown flag and clear the cache if last run was interrupted/crashed
+            val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            val cleanShutdown = prefs.getBoolean("engine_clean_shutdown", true)
+            val cacheDir = File(context.cacheDir, "litert_cache")
+            if (!cleanShutdown) {
+                Log.w(TAG, "Last shutdown was not clean (possible crash or interruption). Clearing LiteRT cache.")
+                try {
+                    cacheDir.deleteRecursively()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to clear LiteRT cache directory", e)
+                }
+                prefs.edit().putBoolean("engine_clean_shutdown", true).apply()
+            }
+            cacheDir.mkdirs()
+
             runPreflight(modelFile, skipMemoryCheck)
 
-            val handle = tryCreateEngine(modelFile.absolutePath, preferGpu)
-            engineHandle = handle
-            handle
+            // Mark shutdown as not clean before initialization starts
+            prefs.edit().putBoolean("engine_clean_shutdown", false).apply()
+
+            try {
+                val handle = tryCreateEngine(modelFile.absolutePath, preferGpu)
+                engineHandle = handle
+                // Successful initialization, set flag back to true
+                prefs.edit().putBoolean("engine_clean_shutdown", true).apply()
+                handle
+            } catch (e: Exception) {
+                // If initialization failed, we still want to reset the flag to true since we handled the error cleanly
+                prefs.edit().putBoolean("engine_clean_shutdown", true).apply()
+                throw e
+            }
         }
 
     /**
@@ -154,7 +185,7 @@ class LiteRtManager(private val context: Context) {
     }
 
     private fun tryCreateEngine(modelPath: String, preferGpu: Boolean): EngineHandle {
-        val cache = context.cacheDir.absolutePath
+        val cache = File(context.cacheDir, "litert_cache").apply { mkdirs() }.absolutePath
 
         if (preferGpu) {
             try {
@@ -214,23 +245,34 @@ class LiteRtManager(private val context: Context) {
         audioBytes: ByteArray?
     ): Flow<String> = flow {
         val handle = engineHandle ?: throw IllegalStateException("Engine not initialized")
+        val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
         inferenceMutex.withLock {
-            handle.engine.createConversation().use { conv ->
-                val contentList = mutableListOf<Content>()
-                imageFile?.let { contentList.add(Content.ImageFile(it.absolutePath)) }
-                audioBytes?.let { contentList.add(Content.AudioBytes(it)) }
-                when {
-                    prompt.isNotEmpty() -> contentList.add(Content.Text(prompt))
-                    audioBytes != null  -> contentList.add(Content.Text("Transcribe or describe this audio"))
-                    else                -> contentList.add(Content.Text("Describe this image"))
-                }
-
-                conv.sendMessageAsync(Contents.of(contentList))
-                    .collect { msg ->
-                        currentCoroutineContext().ensureActive()
-                        emit(msg.text)
+            // Set flag to false before running inference
+            prefs.edit().putBoolean("engine_clean_shutdown", false).apply()
+            try {
+                handle.engine.createConversation().use { conv ->
+                    val contentList = mutableListOf<Content>()
+                    imageFile?.let { contentList.add(Content.ImageFile(it.absolutePath)) }
+                    audioBytes?.let { contentList.add(Content.AudioBytes(it)) }
+                    when {
+                        prompt.isNotEmpty() -> contentList.add(Content.Text(prompt))
+                        audioBytes != null  -> contentList.add(Content.Text("Transcribe or describe this audio"))
+                        else                -> contentList.add(Content.Text("Describe this image"))
                     }
+
+                    conv.sendMessageAsync(Contents.of(contentList))
+                        .collect { msg ->
+                            currentCoroutineContext().ensureActive()
+                            emit(msg.text)
+                        }
+                }
+                // Completed successfully
+                prefs.edit().putBoolean("engine_clean_shutdown", true).apply()
+            } catch (e: Throwable) {
+                // If it was cancelled or failed but cleanly handled, reset flag to true
+                prefs.edit().putBoolean("engine_clean_shutdown", true).apply()
+                throw e
             }
         }
     }.flowOn(Dispatchers.IO)
@@ -381,8 +423,19 @@ class LiteRtManager(private val context: Context) {
         context.filesDir.listFiles { _, n -> n.endsWith(".litertlm") }?.toList() ?: emptyList()
 
     fun close() {
-        engineHandle?.engine?.close()
+        val handle = engineHandle
         engineHandle = null
+        if (handle != null) {
+            managerScope.launch {
+                try {
+                    withTimeoutOrNull(3_000L) {
+                        handle.engine.close()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error closing engine in background: ${e.message}")
+                }
+            }
+        }
         Log.d(TAG, "Engine closed")
     }
 

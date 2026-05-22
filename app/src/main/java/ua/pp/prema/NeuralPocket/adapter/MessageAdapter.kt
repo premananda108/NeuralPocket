@@ -4,6 +4,7 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.net.Uri
 import android.text.format.DateFormat
+import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -44,8 +45,14 @@ class MessageAdapter(
             timeText.text = formatTime(msg.timestamp)
 
             if (msg.imageUriString != null) {
-                imagePreview.visibility = View.VISIBLE
-                imagePreview.setImageURI(Uri.parse(msg.imageUriString))
+                try {
+                    imagePreview.setImageURI(Uri.parse(msg.imageUriString))
+                    imagePreview.visibility =
+                        if (imagePreview.drawable != null) View.VISIBLE else View.GONE
+                } catch (e: Exception) {
+                    Log.w("MessageAdapter", "Image URI no longer accessible: ${e.message}")
+                    imagePreview.visibility = View.GONE
+                }
             } else {
                 imagePreview.visibility = View.GONE
             }
