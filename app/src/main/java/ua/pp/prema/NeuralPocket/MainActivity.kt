@@ -226,7 +226,7 @@ class MainActivity : AppCompatActivity() {
         messagesRecyclerView.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
         messagesRecyclerView.adapter = messageAdapter
         
-        // Отключаем анимацию изменения элементов
+        // Disable item change animations
         (messagesRecyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
     }
 
