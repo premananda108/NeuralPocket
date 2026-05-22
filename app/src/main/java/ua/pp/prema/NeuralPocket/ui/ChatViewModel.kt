@@ -111,7 +111,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadModel(modelFile: File) {
+    /**
+     * @param skipMemoryCheck передаётся в LiteRtManager.initEngine — пропускает lowMemory проверку.
+     *   Должен быть true при перезагрузке после отмены генерации (старый C++ поток ещё жив).
+     */
+    fun loadModel(modelFile: File, skipMemoryCheck: Boolean = false) {
         val preferGpu = getApplication<Application>()
             .getSharedPreferences("app_prefs", Application.MODE_PRIVATE)
             .getBoolean("prefer_gpu", false)
@@ -120,7 +124,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                val handle = liteRtManager.initEngine(modelFile, preferGpu)
+                val handle = liteRtManager.initEngine(modelFile, preferGpu, skipMemoryCheck)
 
                 // Проверяем, было ли GPU→CPU переключение
                 val fallback = liteRtManager.gpuFallbackReason
@@ -292,11 +296,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // LiteRT-LM < 0.15 does not support cancelling generation natively.
                 // The C++ inference thread will keep running in the background and burn CPU/battery.
                 // Workaround: completely close and re-initialize the engine.
+                // skipMemoryCheck=true: the old C++ thread may still hold native memory, causing
+                // the OS to report lowMemory=true — which is a false positive at this point.
                 val currentModelName = liteRtManager.activeHandle?.modelName
                 if (currentModelName != null) {
                     val file = File(getApplication<Application>().filesDir, "$currentModelName.litertlm")
                     if (file.exists()) {
-                        loadModel(file)
+                        loadModel(file, skipMemoryCheck = true)
                     }
                 }
                 throw e

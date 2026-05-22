@@ -86,21 +86,38 @@ class LiteRtManager(private val context: Context) {
     /**
      * Инициализирует Engine из файла модели.
      * Должен вызываться из Dispatchers.IO.
+     * @param skipMemoryCheck если true — пропускает проверку lowMemory (используется при
+     *   перезагрузке движка после отмены генерации, когда C++ поток может ещё держать память).
      * @throws Exception с категоризированным сообщением при ошибке
      */
-    suspend fun initEngine(modelFile: File, preferGpu: Boolean): EngineHandle =
+    suspend fun initEngine(modelFile: File, preferGpu: Boolean, skipMemoryCheck: Boolean = false): EngineHandle =
         withContext(Dispatchers.IO) {
-            runPreflight(modelFile)
-
-            engineHandle?.engine?.close()
+            // Close old engine FIRST — only then check available memory.
+            // Previously, preflight ran before close(), so the lowMemory check
+            // would see the old engine's footprint and throw a false OOM error.
+            try {
+                engineHandle?.engine?.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error closing previous engine (ignoring): ${e.message}")
+            }
             engineHandle = null
+
+            // Give the OS a moment to reclaim native memory before we check it.
+            if (skipMemoryCheck) delay(800)
+
+            runPreflight(modelFile, skipMemoryCheck)
 
             val handle = tryCreateEngine(modelFile.absolutePath, preferGpu)
             engineHandle = handle
             handle
         }
 
-    private fun runPreflight(modelFile: File) {
+    /**
+     * @param skipMemoryCheck если true — не проверяет lowMemory флаг ОС.
+     *   Полезно при перезагрузке сразу после отмены, когда старый C++ поток
+     *   может ещё освобождать память и ОС временно сообщает lowMemory=true.
+     */
+    private fun runPreflight(modelFile: File, skipMemoryCheck: Boolean = false) {
         val abis = Build.SUPPORTED_ABIS.toList()
         Log.d(TAG, "=== Engine Init === Device: ${Build.MANUFACTURER} ${Build.MODEL}")
         Log.d(TAG, "ABIs: $abis  SDK: ${Build.VERSION.SDK_INT}")
@@ -116,13 +133,13 @@ class LiteRtManager(private val context: Context) {
         val memInfo = ActivityManager.MemoryInfo().also { actMgr.getMemoryInfo(it) }
         val ramGb   = memInfo.totalMem.toDouble() / GiB
         val availGb = memInfo.availMem.toDouble() / GiB
-        Log.d(TAG, "RAM Total: %.1f GB, Avail: %.1f GB, LowMemory: ${memInfo.lowMemory}")
+        Log.d(TAG, "RAM Total: %.1f GB, Avail: %.1f GB, LowMemory: ${memInfo.lowMemory} (skipCheck=$skipMemoryCheck)")
         
         if (ramGb < 2.5) {
             throw Exception("out of memory: device has only %.1f GB RAM".format(ramGb))
         }
         
-        if (memInfo.lowMemory) {
+        if (!skipMemoryCheck && memInfo.lowMemory) {
             throw Exception("out of memory: device is currently in a low memory state (avail: %.1f GB)".format(availGb))
         }
 
