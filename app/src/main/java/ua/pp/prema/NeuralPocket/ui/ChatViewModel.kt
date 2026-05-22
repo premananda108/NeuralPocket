@@ -28,6 +28,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
@@ -61,6 +63,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         loadChats()
         runPreflightAndLoadModel()
+
+        viewModelScope.launch {
+            uiState.map { it.currentChat?.id }.distinctUntilChanged().collect { id ->
+                if (id != null) {
+                    getApplication<Application>()
+                        .getSharedPreferences("app_prefs", Application.MODE_PRIVATE)
+                        .edit()
+                        .putString("last_active_chat_id", id)
+                        .apply()
+                }
+            }
+        }
     }
 
     // ── Preflight ─────────────────────────────────────────────────────────────
@@ -328,7 +342,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadChats() {
         val loaded = chatRepository.load()
         val chats = if (loaded.isEmpty()) listOf(Chat(title = "Chat 1")) else loaded.toList()
-        _uiState.update { it.copy(chats = chats, currentChatIndex = 0) }
+
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", Application.MODE_PRIVATE)
+        val lastChatId = prefs.getString("last_active_chat_id", null)
+        
+        var indexToSelect = chats.lastIndex
+        if (lastChatId != null) {
+            val idx = chats.indexOfFirst { it.id == lastChatId }
+            if (idx != -1) {
+                indexToSelect = idx
+            }
+        }
+
+        _uiState.update { it.copy(chats = chats, currentChatIndex = indexToSelect) }
     }
 
     fun createNewChat() {
