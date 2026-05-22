@@ -76,8 +76,8 @@ data class EngineHandle(val engine: Engine, val backend: String, val modelName: 
 // ── LiteRtManager ─────────────────────────────────────────────────────────────
 
 /**
- * Управляет жизненным циклом LiteRT Engine.
- * Создаётся в ChatViewModel и живёт столько, сколько ViewModel (переживает поворот экрана).
+ * Manages LiteRT Engine lifecycle.
+ * Created in ChatViewModel and lives as long as the ViewModel (survives screen rotation).
  */
 class LiteRtManager(private val context: Context) {
 
@@ -90,11 +90,11 @@ class LiteRtManager(private val context: Context) {
     // ── Engine init ───────────────────────────────────────────────────────────
 
     /**
-     * Инициализирует Engine из файла модели.
-     * Должен вызываться из Dispatchers.IO.
-     * @param skipMemoryCheck если true — пропускает проверку lowMemory (используется при
-     *   перезагрузке движка после отмены генерации, когда C++ поток может ещё держать память).
-     * @throws Exception с категоризированным сообщением при ошибке
+     * Initializes Engine from model file.
+     * Must be called from Dispatchers.IO.
+     * @param skipMemoryCheck if true — skips lowMemory check (used when
+     *   restarting engine after cancelling generation, when C++ thread might still hold memory).
+     * @throws Exception with categorized message on error
      */
     suspend fun initEngine(modelFile: File, preferGpu: Boolean, skipMemoryCheck: Boolean = false): EngineHandle =
         withContext(Dispatchers.IO) {
@@ -148,9 +148,9 @@ class LiteRtManager(private val context: Context) {
         }
 
     /**
-     * @param skipMemoryCheck если true — не проверяет lowMemory флаг ОС.
-     *   Полезно при перезагрузке сразу после отмены, когда старый C++ поток
-     *   может ещё освобождать память и ОС временно сообщает lowMemory=true.
+     * @param skipMemoryCheck if true — does not check OS lowMemory flag.
+     *   Useful when restarting immediately after cancellation, when old C++ thread
+     *   might still be releasing memory and OS temporarily reports lowMemory=true.
      */
     private fun runPreflight(modelFile: File, skipMemoryCheck: Boolean = false) {
         val abis = Build.SUPPORTED_ABIS.toList()
@@ -226,7 +226,7 @@ class LiteRtManager(private val context: Context) {
         return EngineHandle(eng, "CPU", File(modelPath).nameWithoutExtension)
     }
 
-    /** Если GPU упал и переключились на CPU — здесь причина для отображения пользователю. */
+    /** If GPU failed and switched to CPU — here is the reason for display to user. */
     var gpuFallbackReason: String? = null
         private set
 
@@ -236,8 +236,8 @@ class LiteRtManager(private val context: Context) {
     private val inferenceMutex = Mutex()
 
     /**
-     * Отправляет сообщение в модель. Возвращает Flow<String> токенов.
-     * Flow завершается после последнего токена или с исключением при ошибке.
+     * Sends message to model. Returns Flow<String> of tokens.
+     * Flow completes after the last token or with an exception on error.
      */
     fun generateResponse(
         prompt: String,
@@ -280,8 +280,8 @@ class LiteRtManager(private val context: Context) {
     // ── Download ──────────────────────────────────────────────────────────────
 
     /**
-     * Скачивает модель по URL. Возвращает Flow<DownloadState>.
-     * Проверяет свободное место перед началом загрузки.
+     * Downloads model from URL. Returns Flow<DownloadState>.
+     * Checks free space before starting download.
      */
     fun downloadModel(model: ModelInfo, targetFile: File): Flow<DownloadState> = flow {
         val partFile = File(targetFile.parentFile, "${targetFile.name}.part")
@@ -307,7 +307,7 @@ class LiteRtManager(private val context: Context) {
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout    = 60_000
-                setRequestProperty("Accept-Encoding", "identity") // точный Content-Length
+                setRequestProperty("Accept-Encoding", "identity") // exact Content-Length
                 connect()
             }
 

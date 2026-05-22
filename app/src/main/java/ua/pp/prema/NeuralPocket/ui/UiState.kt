@@ -6,25 +6,25 @@ import ua.pp.prema.NeuralPocket.engine.PreflightResult
 // ── Model status ──────────────────────────────────────────────────────────────
 
 sealed class ModelStatus {
-    /** Модель ещё не выбрана / не загружена. */
+    /** Model not selected / not loaded. */
     object NotLoaded : ModelStatus()
 
-    /** Идёт скачивание файла модели. */
+    /** Downloading model file. */
     data class Downloading(val modelName: String, val percent: Int) : ModelStatus()
 
-    /** Файл скачан, идёт инициализация Engine. */
+    /** File downloaded, initializing engine. */
     data class Loading(val modelName: String) : ModelStatus()
 
-    /** Движок готов к работе. */
+    /** Engine ready for work. */
     data class Ready(val modelName: String, val backend: String) : ModelStatus()
 
-    /** Ошибка (фатальная или с возможностью повторить). */
+    /** Error (fatal or retriable). */
     data class Error(val message: String, val canRetry: Boolean = true) : ModelStatus()
 }
 
 // ── UI Events ─────────────────────────────────────────────────────────────────
 
-/** Одноразовые события (показ диалогов, ошибок), которые не должны сохраняться в стейте. */
+/** One-time events (showing dialogs, errors) that shouldn't be kept in state. */
 sealed class UiEvent {
     data class ShowError(val message: String) : UiEvent()
     data class ShowPreflight(val result: PreflightResult) : UiEvent()
@@ -35,8 +35,8 @@ sealed class UiEvent {
 // ── Chat UI state ─────────────────────────────────────────────────────────────
 
 /**
- * Единственный источник правды для UI.
- * MainActivity наблюдает за этим объектом через StateFlow.
+ * Single source of truth for UI.
+ * MainActivity observes this object via StateFlow.
  */
 data class ChatUiState(
     val chats: List<Chat>         = emptyList(),

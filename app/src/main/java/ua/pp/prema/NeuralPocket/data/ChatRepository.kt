@@ -19,7 +19,7 @@ class ChatRepository(private val context: Context) {
                 chatObj.put("systemPrompt", chat.systemPrompt)
                 val msgs = JSONArray()
                 for (msg in chat.messages) {
-                    if (msg.isStreaming) continue // не сохраняем незаконченные
+                    if (msg.isStreaming) continue // don't save incomplete
                     val m = JSONObject()
                     m.put("id", msg.id)
                     m.put("text", msg.text)

@@ -80,7 +80,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // ── Preflight ─────────────────────────────────────────────────────────────
 
     private fun runPreflightAndLoadModel() {
-        // Если уже есть скачанные модели, пропускаем проверку места
+        // If models are already downloaded, skip storage check
         val hasModels = getApplication<Application>().filesDir.listFiles { _, n -> n.endsWith(".litertlm") }?.isNotEmpty() == true
         if (hasModels) {
             onPreflightAccepted()
@@ -112,8 +112,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * @param skipMemoryCheck передаётся в LiteRtManager.initEngine — пропускает lowMemory проверку.
-     *   Должен быть true при перезагрузке после отмены генерации (старый C++ поток ещё жив).
+     * @param skipMemoryCheck passed to LiteRtManager.initEngine — skips lowMemory check.
+     *   Must be true when reloading after cancelling generation (old C++ thread is still alive).
      */
     fun loadModel(modelFile: File, skipMemoryCheck: Boolean = false) {
         val preferGpu = getApplication<Application>()
@@ -126,7 +126,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val handle = liteRtManager.initEngine(modelFile, preferGpu, skipMemoryCheck)
 
-                // Проверяем, было ли GPU→CPU переключение
+                // Check if there was a GPU→CPU fallback
                 val fallback = liteRtManager.gpuFallbackReason
                 if (fallback != null) {
                     _events.trySend(UiEvent.ShowGpuFallback(fallback))
