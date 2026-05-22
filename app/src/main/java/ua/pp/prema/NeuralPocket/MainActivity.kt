@@ -393,8 +393,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showHistoryLimitDialog() {
-        val options = arrayOf("Don't remember (0)", "1 message", "3 messages", "4 messages", "5 messages")
-        val values = intArrayOf(0, 1, 3, 4, 5)
+        val options = arrayOf("Don't remember (0)", "1 message", "2 messages", "3 messages", "4 messages", "5 messages")
+        val values = intArrayOf(0, 1, 2, 3, 4)
         val current = prefs.getInt("history_limit", 3)
         val checkedItem = values.indexOf(current).takeIf { it >= 0 } ?: 2
 
