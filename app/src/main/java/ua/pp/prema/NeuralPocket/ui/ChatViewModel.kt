@@ -192,7 +192,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(
         prompt: String,
         imageUri: Uri?,
-        audioBytes: ByteArray?
+        audioBytes: ByteArray?,
+        cameraImageFile: File? = null
     ) {
         if (prompt.isEmpty() && imageUri == null && audioBytes == null) return
         val chat = _uiState.value.currentChat ?: return
@@ -331,7 +332,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 throw e
             } finally {
-                withContext(Dispatchers.IO) { imageFile?.delete() }
+                withContext(Dispatchers.IO) {
+                    imageFile?.delete()
+                    cameraImageFile?.delete()
+                }
                 inferenceJob = null
             }
         }

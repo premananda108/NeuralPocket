@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     // ── Recording ─────────────────────────────────────────────────────────────
     private var selectedImageUri: Uri? = null
     private var cameraImageUri: Uri? = null
+    private var cameraImageFile: File? = null   // underlying camera file — deleted by ViewModel after send
     private var recordedAudioBytes: ByteArray? = null
     private var isRecording = false
     private var audioRecord: AudioRecord? = null
@@ -230,11 +231,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupInput() {
-        sendButton.setOnClickListener { 
+        sendButton.setOnClickListener {
             if (viewModel.uiState.value.isGenerating) {
                 viewModel.stopGeneration()
             } else {
-                viewModel.sendMessage(messageInput.text.toString().trim(), selectedImageUri, recordedAudioBytes)
+                viewModel.sendMessage(
+                    messageInput.text.toString().trim(),
+                    selectedImageUri,
+                    recordedAudioBytes,
+                    cameraImageFile
+                )
                 clearInputs()
             }
         }
@@ -262,6 +268,7 @@ class MainActivity : AppCompatActivity() {
         messageInput.setText("")
         selectedImageUri = null
         recordedAudioBytes = null
+        cameraImageFile = null       // ViewModel takes ownership of the file; clear reference only
         imagePreviewCard.visibility = View.GONE
         audioPreviewCard.visibility = View.GONE
         attachmentRow.visibility = View.GONE
@@ -460,9 +467,11 @@ class MainActivity : AppCompatActivity() {
     private fun takePhoto() {
         try {
             val file = File(cacheDir, "camera_${System.currentTimeMillis()}.jpg")
+            cameraImageFile = file   // track for deletion after send
             cameraImageUri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
             takePictureLauncher.launch(cameraImageUri!!)
         } catch (e: Exception) {
+            cameraImageFile = null
             Toast.makeText(this, "Error starting camera", Toast.LENGTH_SHORT).show()
         }
     }
