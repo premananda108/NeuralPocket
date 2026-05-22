@@ -286,8 +286,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: CancellationException) {
                 // Stopped by user
-                if (fullResponse.isEmpty()) fullResponse = "— Stopped —"
+                fullResponse = if (fullResponse.isEmpty()) "— Stopped —" else "$fullResponse\n— Stopped —"
                 finaliseAiMessage(chatId, fullResponse)
+                
+                // LiteRT-LM < 0.15 does not support cancelling generation natively.
+                // The C++ inference thread will keep running in the background and burn CPU/battery.
+                // Workaround: completely close and re-initialize the engine.
+                val currentModelName = liteRtManager.activeHandle?.modelName
+                if (currentModelName != null) {
+                    val file = File(getApplication<Application>().filesDir, "$currentModelName.litertlm")
+                    if (file.exists()) {
+                        loadModel(file)
+                    }
+                }
+                throw e
             } finally {
                 withContext(Dispatchers.IO) { imageFile?.delete() }
                 inferenceJob = null
@@ -306,7 +318,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (chat != null && chat.messages.isNotEmpty()) {
                     val lastMsg = chat.messages.last()
                     if (!lastMsg.isUser && lastMsg.isStreaming) {
-                        val finalTxt = if (lastMsg.text.isEmpty()) "— Stopped —" else lastMsg.text
+                        val finalTxt = if (lastMsg.text.isEmpty()) "— Stopped —" else "${lastMsg.text}\n— Stopped —"
                         val chats = state.chats.map { c ->
                             if (c.id == chat.id) {
                                 val msgs = c.messages.toMutableList()
