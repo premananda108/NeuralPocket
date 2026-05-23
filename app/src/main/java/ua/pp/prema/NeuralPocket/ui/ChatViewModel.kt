@@ -320,7 +320,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                if (fullResponse.isNotEmpty()) {
+                // Only finalise if the user did not press Stop.
+                // stopGeneration() already wrote the final text with "— Stopped —";
+                // calling finaliseAiMessage() here would silently overwrite it.
+                if (fullResponse.isNotEmpty() && !stopRequested) {
                     finaliseAiMessage(chatId, fullResponse)
                 }
             } finally {
@@ -413,6 +416,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteChat(index: Int) {
+        val chatToDelete = _uiState.value.chats.getOrNull(index)
+
         _uiState.update { state ->
             val mutableChats = state.chats.toMutableList()
             mutableChats.removeAt(index)
@@ -424,6 +429,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             state.copy(chats = mutableChats.toList(), currentChatIndex = newIndex)
         }
         saveChats()
+
+        // Delete persisted image files that belonged to the deleted chat.
+        // Only files inside chat_images/ are managed by us — skip external URIs.
+        if (chatToDelete != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                deleteChatImages(chatToDelete)
+            }
+        }
+    }
+
+    /**
+     * Deletes all image files in filesDir/chat_images/ that were referenced
+     * by messages in [chat]. External content:// URIs are skipped — we only
+     * own files we created ourselves inside the app's private storage.
+     */
+    private fun deleteChatImages(chat: Chat) {
+        val imagesDir = File(getApplication<Application>().filesDir, "chat_images")
+        chat.messages.forEach { msg ->
+            val uriString = msg.imageUriString ?: return@forEach
+            try {
+                val uri = Uri.parse(uriString)
+                // file:// URIs pointing inside chat_images/ are ours to delete.
+                if (uri.scheme == "file") {
+                    val file = File(uri.path ?: return@forEach)
+                    if (file.canonicalPath.startsWith(imagesDir.canonicalPath)) {
+                        val deleted = file.delete()
+                        if (!deleted) Log.w(TAG, "Could not delete image: ${file.path}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "deleteChatImages: error processing $uriString", e)
+            }
+        }
     }
 
     fun setSystemPrompt(text: String) {
