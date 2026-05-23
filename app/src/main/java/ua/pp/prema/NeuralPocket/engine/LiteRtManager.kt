@@ -263,7 +263,12 @@ class LiteRtManager(private val context: Context) {
 
                     conv.sendMessageAsync(Contents.of(contentList))
                         .collect { msg ->
-                            currentCoroutineContext().ensureActive()
+                            // NOTE: ensureActive() intentionally removed.
+                            // Calling it here converts coroutine cancellation into an immediate
+                            // exit from collect, which triggers an early close() on the native
+                            // Conversation while the C++ inference thread is still running —
+                            // causing a crash. Cancellation is handled by stopRequested flag
+                            // in ChatViewModel instead (soft-stop pattern).
                             emit(msg.text)
                         }
                 }

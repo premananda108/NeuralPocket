@@ -32,7 +32,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -51,6 +50,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val events: Flow<UiEvent> = _events.receiveAsFlow()
 
     private var inferenceJob: Job? = null
+    // Soft-stop flag: set to true by stopGeneration() so the collect loop
+    // ignores new tokens without cancelling the coroutine. This avoids
+    // forcing an early close() on the native Conversation/Engine while
+    // the C++ inference thread is still running (which caused crashes).
+    @Volatile private var stopRequested = false
 
     // ── Dependencies ──────────────────────────────────────────────────────────
 
@@ -260,6 +264,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         inferenceJob = viewModelScope.launch {
+            stopRequested = false
             // Copy image to internal storage so it survives app restart.
             // External provider URIs (gallery / downloads) lose their permission
             // grant after the process is killed, causing a SecurityException on reload.
@@ -297,40 +302,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         finaliseAiMessage(chatId, fullResponse)
                     }
                     .collect { token ->
-                        fullResponse += token
-                        _uiState.update { state ->
-                            val chats = state.chats.map { c ->
-                                if (c.id == chatId && c.messages.isNotEmpty()) {
-                                    val msgs = c.messages.toMutableList()
-                                    msgs[msgs.lastIndex] = msgs.last().copy(text = fullResponse, isStreaming = true)
-                                    c.copy(messages = msgs)
-                                } else c
+                        // Soft-stop: ignore new tokens once user pressed Stop.
+                        // The job is NOT cancelled — we let sendMessageAsync() finish
+                        // naturally so the native Conversation/Engine closes safely.
+                        if (!stopRequested) {
+                            fullResponse += token
+                            _uiState.update { state ->
+                                val chats = state.chats.map { c ->
+                                    if (c.id == chatId && c.messages.isNotEmpty()) {
+                                        val msgs = c.messages.toMutableList()
+                                        msgs[msgs.lastIndex] = msgs.last().copy(text = fullResponse, isStreaming = true)
+                                        c.copy(messages = msgs)
+                                    } else c
+                                }
+                                state.copy(chats = chats, streamTrigger = state.streamTrigger + 1)
                             }
-                            state.copy(chats = chats, streamTrigger = state.streamTrigger + 1)
                         }
                     }
 
                 if (fullResponse.isNotEmpty()) {
                     finaliseAiMessage(chatId, fullResponse)
                 }
-            } catch (e: CancellationException) {
-                // Stopped by user
-                fullResponse = if (fullResponse.isEmpty()) "— Stopped —" else "$fullResponse\n— Stopped —"
-                finaliseAiMessage(chatId, fullResponse)
-                
-                // LiteRT-LM < 0.15 does not support cancelling generation natively.
-                // The C++ inference thread will keep running in the background and burn CPU/battery.
-                // Workaround: completely close and re-initialize the engine.
-                // skipMemoryCheck=true: the old C++ thread may still hold native memory, causing
-                // the OS to report lowMemory=true — which is a false positive at this point.
-                val currentModelName = liteRtManager.activeHandle?.modelName
-                if (currentModelName != null) {
-                    val file = File(getApplication<Application>().filesDir, "$currentModelName.litertlm")
-                    if (file.exists()) {
-                        loadModel(file, skipMemoryCheck = true)
-                    }
-                }
-                throw e
             } finally {
                 withContext(Dispatchers.IO) {
                     imageFile?.delete()
@@ -342,11 +334,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopGeneration() {
-        val job = inferenceJob
-        if (job != null) {
-            job.cancel()
-            inferenceJob = null
-            
+        if (inferenceJob != null) {
+            // Soft stop: set flag so the collect loop stops updating UI with new tokens,
+            // but do NOT cancel the job. Cancelling the coroutine while sendMessageAsync()
+            // is collecting causes an early close() on the native Conversation before the
+            // C++ inference thread finishes — leading to a crash in LiteRT-LM.
+            // The job will finish naturally; the engine is safe.
+            stopRequested = true
+
             _uiState.update { state ->
                 val chat = state.currentChat
                 if (chat != null && chat.messages.isNotEmpty()) {
