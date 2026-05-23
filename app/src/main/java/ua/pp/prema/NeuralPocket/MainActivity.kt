@@ -43,6 +43,7 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -86,8 +87,17 @@ class MainActivity : AppCompatActivity() {
     private var cameraImageUri: Uri? = null
     private var cameraImageFile: File? = null   // underlying camera file — deleted by ViewModel after send
     private var recordedAudioBytes: ByteArray? = null
-    private var isRecording = false
+
+    // FIX: @Volatile ensures that writes from IO thread are immediately visible on Main thread.
+    // Without this, isRecording could be cached in a register and the IO loop would never see
+    // the Main-thread write of `isRecording = false`, causing the loop to run indefinitely.
+    @Volatile private var isRecording = false
     private var audioRecord: AudioRecord? = null
+
+    // FIX: keep a reference to the recording coroutine so we can:
+    //   - check whether PCM→WAV conversion is still in progress before sending
+    //   - cancel it when stopping generation or destroying the activity
+    private var recordingJob: Job? = null
 
     private lateinit var prefs: SharedPreferences
 
@@ -225,7 +235,7 @@ class MainActivity : AppCompatActivity() {
         messageAdapter = MessageAdapter(mutableListOf())
         messagesRecyclerView.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
         messagesRecyclerView.adapter = messageAdapter
-        
+
         // Disable item change animations
         (messagesRecyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
     }
@@ -233,8 +243,18 @@ class MainActivity : AppCompatActivity() {
     private fun setupInput() {
         sendButton.setOnClickListener {
             if (viewModel.uiState.value.isGenerating) {
+                // FIX: if recording is active while the user stops generation,
+                // abort it immediately. The recording job sets UI state in its
+                // finally block, which would conflict with the engine-reload UI state.
+                abortRecording()
                 viewModel.stopGeneration()
             } else {
+                // FIX: guard against the user tapping Send while the recording
+                // coroutine is still converting PCM→WAV (recordedAudioBytes not yet set).
+                if (recordingJob?.isActive == true) {
+                    Toast.makeText(this, "Audio is still processing, please wait…", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 viewModel.sendMessage(
                     messageInput.text.toString().trim(),
                     selectedImageUri,
@@ -265,6 +285,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearInputs() {
+        // FIX: stop any ongoing recording before clearing state, so the recording
+        // coroutine's finally block doesn't resurrect the audio preview after we hide it.
+        abortRecording()
         messageInput.setText("")
         selectedImageUri = null
         recordedAudioBytes = null
@@ -272,6 +295,24 @@ class MainActivity : AppCompatActivity() {
         imagePreviewCard.visibility = View.GONE
         audioPreviewCard.visibility = View.GONE
         attachmentRow.visibility = View.GONE
+        audioButton.isEnabled = true
+    }
+
+    /**
+     * Stops the microphone hardware AND cancels the background PCM→WAV coroutine.
+     * Safe to call multiple times or when not recording.
+     * Unlike stopRecording(), this discards the recorded data entirely.
+     */
+    private fun abortRecording() {
+        isRecording = false
+        try {
+            audioRecord?.stop()
+        } catch (_: IllegalStateException) {}
+        audioRecord?.release()
+        audioRecord = null
+        recordingJob?.cancel()
+        recordingJob = null
+        audioButton.clearColorFilter()
         audioButton.isEnabled = true
     }
 
@@ -331,7 +372,7 @@ class MainActivity : AppCompatActivity() {
             val oldItemCount = messageAdapter.itemCount
             messageAdapter.replaceAll(currentChat.messages)
             val newItemCount = messageAdapter.itemCount
-            
+
             // Stay at bottom if we were at bottom, or if the last message is currently visible
             val shouldScroll = newItemCount > oldItemCount || isAtBottom || isLastItemVisible
 
@@ -374,12 +415,12 @@ class MainActivity : AppCompatActivity() {
     private fun showModelSelectionDialog() {
         val downloadedModels = filesDir.listFiles { _, n -> n.endsWith(".litertlm") }?.map { it.name } ?: emptyList()
         val options = AVAILABLE_MODELS.map {
-            if (downloadedModels.contains(it.name + ".litertlm")) "${it.name} (Downloaded)" else it.name 
+            if (downloadedModels.contains(it.name + ".litertlm")) "${it.name} (Downloaded)" else it.name
         }.toTypedArray()
 
         AlertDialog.Builder(this)
             .setTitle(R.string.choose_model_title)
-            .setItems(options) { _, i -> 
+            .setItems(options) { _, i ->
                 val model = AVAILABLE_MODELS[i]
                 val file = File(filesDir, "${model.name}.litertlm")
                 if (file.exists()) {
@@ -415,7 +456,7 @@ class MainActivity : AppCompatActivity() {
         val input = EditText(this)
         input.setText(chat.systemPrompt)
         input.hint = "Example: Answer concisely and like a pirate"
-        
+
         val pad = resources.displayMetrics.density * 16
         input.setPadding(pad.toInt(), pad.toInt(), pad.toInt(), pad.toInt())
 
@@ -485,14 +526,17 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         val sampleRate = 16000
         val bufSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-        
+
         if (bufSize <= 0) {
             Toast.makeText(this, "AudioRecord error: bad bufSize", Toast.LENGTH_SHORT).show()
             return
         }
 
         try {
-            audioRecord = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize)
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC, sampleRate,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize
+            )
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 Toast.makeText(this, "AudioRecord not initialized", Toast.LENGTH_SHORT).show()
                 audioRecord?.release()
@@ -503,14 +547,16 @@ class MainActivity : AppCompatActivity() {
             isRecording = true
             audioButton.setColorFilter(ContextCompat.getColor(this, R.color.record_red))
 
-            lifecycleScope.launch(Dispatchers.IO) {
+            // FIX: store the Job reference so we can cancel it or check isActive later.
+            recordingJob = lifecycleScope.launch(Dispatchers.IO) {
                 val tempFile = File(cacheDir, "temp_record.pcm")
                 try {
                     FileOutputStream(tempFile).use { out ->
                         val buf = ByteArray(bufSize)
-                        val maxBytes = sampleRate * 2 * 30 // 30 sec limit (16kHz 16-bit mono)
+                        val maxBytes = sampleRate * 2 * 30  // 30 sec limit (16 kHz 16-bit mono)
                         var totalBytes = 0
 
+                        // isRecording is @Volatile — safe to read from IO thread.
                         while (isRecording && totalBytes < maxBytes) {
                             val read = audioRecord?.read(buf, 0, buf.size) ?: 0
                             if (read > 0) {
@@ -519,26 +565,42 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    
-                    if (isRecording) { // Hit the 30s limit
+
+                    if (isRecording) {  // hit the 30-second limit
                         withContext(Dispatchers.Main) { stopRecording() }
                     }
 
-                    if (tempFile.exists() && tempFile.length() > 0) {
-                        recordedAudioBytes = pcmToWav(tempFile.readBytes(), sampleRate, 1, 16)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                } finally {
-                    tempFile.delete()
+                    // FIX: compute WAV bytes while still on IO, then assign on Main.
+                    // Previously `recordedAudioBytes =` was written from IO and read from Main
+                    // without synchronisation — a classic data race.
+                    val wavBytes = if (tempFile.exists() && tempFile.length() > 0) {
+                        pcmToWav(tempFile.readBytes(), sampleRate, 1, 16)
+                    } else null
+
                     withContext(Dispatchers.Main) {
-                        if (recordedAudioBytes != null) {
+                        // If the job was cancelled (e.g. user tapped Stop-generation),
+                        // skip updating UI — abortRecording() already reset everything.
+                        if (recordingJob?.isCancelled == true) return@withContext
+
+                        recordedAudioBytes = wavBytes
+                        if (wavBytes != null) {
                             audioPreviewCard.visibility = View.VISIBLE
                             attachmentRow.visibility = View.VISIBLE
                             audioButton.isEnabled = false
+                        } else {
+                            Toast.makeText(this@MainActivity, "Recording was empty", Toast.LENGTH_SHORT).show()
                         }
                         audioButton.clearColorFilter()
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    withContext(Dispatchers.Main) {
+                        audioButton.clearColorFilter()
+                    }
+                } finally {
+                    tempFile.delete()
+                    // FIX: null the job reference so isActive checks stay accurate.
+                    withContext(Dispatchers.Main) { recordingJob = null }
                 }
             }
         } catch (e: SecurityException) {
@@ -546,9 +608,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Graceful stop: signals the recording loop to finish, releases hardware,
+     * and lets the background coroutine finish writing the WAV.
+     * The audio data is preserved and shown to the user.
+     */
     private fun stopRecording() {
         if (!isRecording) return
-        isRecording = false
+        isRecording = false     // @Volatile — IO loop will exit on next iteration
         try {
             audioRecord?.stop()
         } catch (e: IllegalStateException) {
@@ -558,6 +625,8 @@ class MainActivity : AppCompatActivity() {
             audioRecord = null
             audioButton.clearColorFilter()
         }
+        // Note: recordingJob is intentionally NOT cancelled here —
+        // we want the coroutine to finish the PCM→WAV conversion.
     }
 
     // ── WAV helper ────────────────────────────────────────────────────────────
@@ -586,7 +655,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        if (isRecording) stopRecording()
+        // FIX: cancel the recording job on destroy so the IO coroutine doesn't
+        // attempt withContext(Dispatchers.Main) on a dead Activity.
+        abortRecording()
         super.onDestroy()
     }
 }
